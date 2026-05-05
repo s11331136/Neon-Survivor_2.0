@@ -135,6 +135,65 @@
 
 <script>
 /**
+ * AUDIO SYSTEM (Synthesized Neon Sounds)
+ * --------------------------------------------------------------------------
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    switch(type) {
+        case 'kill':
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(); osc.stop(now + 0.1);
+            break;
+        case 'pickup':
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+            osc.start(); osc.stop(now + 0.05);
+            break;
+        case 'upgrade':
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(); osc.stop(now + 0.2);
+            break;
+        case 'overload_start':
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(100, now);
+            osc.frequency.exponentialRampToValueAtTime(1000, now + 0.5);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.start(); osc.stop(now + 0.5);
+            break;
+        case 'overload_end':
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            osc.start(); osc.stop(now + 0.3);
+            break;
+    }
+}
+
+/**
  * CORE CONSTANTS AND STATE
  * --------------------------------------------------------------------------
  */
@@ -150,19 +209,16 @@ let spawnTimer = 0;
 let defeatedBossCount = 0;
 let intensityMultiplier = 1.0; 
 
-// New State for Improvements
 let highScore = localStorage.getItem('neon_high_score') || 0;
 let shakeAmount = 0;
 document.getElementById('high-score').innerText = highScore;
 
-// --- 特效與衝刺狀態 ---
 let particles = [];
 let bgParticles = [];
 let dashCooldown = 0;
 let isDashing = false;
 let dashTimer = 0;
 
-// --- 無人機 (Drone) 狀態 ---
 let drone = {
     active: false, 
     angle: 0,
@@ -185,20 +241,18 @@ const bossDatabase = [
     { name: "CYBER HYDRA", hp: 750, size: 95, speed: 1.4, color: "#00aaff", type: "hydra" }
 ];
 
-// --- 玩家物件 (新增 Neon Ring 間隔屬性) ---
 let player = { 
     x:0, y:0, size:20, angle:0, hp: 100, maxHp: 100, type: 'knight', 
     multiShot: 1, 
-    ringInterval: 300, // 兩次 Neon Ring 之間的最小間隔 (毫秒)
-    lastRingTime: 0     // 上次施放 Neon Ring 的時間
+    ringInterval: 300, 
+    lastRingTime: 0     
 };
 
-// --- 升級池 (含新增：無限攻擊力提升) ---
 let upgradePool = [
     { 
         id: "atk_infinite", title: "ATK UP EX", desc: "Damage +10% (Stackable)", rarity: 1.0,
         effect: () => { heroes[player.type].damageMult *= 1.1; },
-        isAvailable: () => true // 無限疊加，不設上限
+        isAvailable: () => true 
     },
     { 
         id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet", rarity: 1.0,
@@ -229,9 +283,7 @@ let upgradePool = [
     },
     { 
         id: "drone_unit", title: "DRONE UNIT", desc: "Autonomous Chain Striker", rarity: 0.1, 
-        effect: () => { 
-            drone.active = true; 
-        }, 
+        effect: () => { drone.active = true; }, 
         isAvailable: () => !drone.active 
     }
 ];
@@ -242,7 +294,10 @@ let upgradePool = [
  */
 function toCharSelect() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('char-select').style.display = 'flex'; }
 function selectChar(type) { player.type = type; document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active')); document.getElementById('card-' + type).classList.add('active'); document.getElementById('confirm-btn').disabled = false; }
-function startGame() { document.getElementById('char-select').style.display = 'none'; document.getElementById('game-ui').style.display = 'block'; gameStarted = true; initBGParticles(); resize(); resetGame(); }
+function startGame() { 
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    document.getElementById('char-select').style.display = 'none'; document.getElementById('game-ui').style.display = 'block'; gameStarted = true; initBGParticles(); resize(); resetGame(); 
+}
 function backToMain() { location.reload(); }
 
 function resetGame() { 
@@ -326,6 +381,7 @@ function showUpgradeScreen() {
         if(option.id === "drone_unit") div.style.borderColor = "#00ffcc";
         div.innerHTML = `<h3>${option.title}</h3><p>${option.desc}</p>`;
         div.onclick = () => { 
+            playSound('upgrade');
             option.effect(); 
             screen.style.display = "none"; 
             isPaused = false; 
@@ -414,7 +470,6 @@ window.addEventListener('mousedown', e => { if(!gameStarted || isPaused) return;
 window.addEventListener('mouseup', e => { 
     if(e.button===2 && isCharging) { 
         let currentTime = Date.now();
-        // 檢查是否超過了設定的 Neon Ring 間隔時間
         if(chargeTime > 30 / heroes[player.type].chargeSpeed && (currentTime - player.lastRingTime > player.ringInterval)) { 
             releaseNeonRing(); 
             player.lastRingTime = currentTime;
@@ -522,6 +577,7 @@ function updateBossAI() {
             createExplosion(bullets[j].x, bullets[j].y, "white"); 
             if(bullets[j].type!=='ring') bullets.splice(j, 1);
             if(boss.hp <= 0) { 
+                playSound('kill');
                 score += 2500; defeatedBossCount++; intensityMultiplier += 0.1;
                 shakeAmount = 15; createExplosion(boss.x, boss.y, boss.color);
                 boss = null; document.getElementById('boss-ui').style.display = 'none'; 
@@ -557,7 +613,7 @@ function update() {
     player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
     player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
     if(isCharging) chargeTime += hero.chargeSpeed;
-    if(isOverloaded) { if(gameTick % 5 === 0) fireBullet(); overloadTimer--; if(overloadTimer <= 0) isOverloaded = false; updateUI(); } 
+    if(isOverloaded) { if(gameTick % 5 === 0) fireBullet(); overloadTimer--; if(overloadTimer <= 0) { isOverloaded = false; playSound('overload_end'); } updateUI(); } 
     handleEnemySpawning(); updateBossAI();
     for(let i=particles.length-1; i>=0; i--) {
         particles[i].x += particles[i].vx; particles[i].y += particles[i].vy;
@@ -580,6 +636,7 @@ function update() {
         for(let j=bullets.length-1; j>=0; j--) {
             let b = bullets[j];
             if(Math.hypot(b.x-e.x, b.y-e.y) < 25) {
+                playSound('kill');
                 createExplosion(e.x, e.y, b.type === 'chain' ? drone.color : "#ff4444");
                 if (b.type === 'chain' && b.chainsLeft > 0) {
                     b.chainsLeft--;
@@ -596,8 +653,9 @@ function update() {
     }
     for(let i=collectibles.length-1; i>=0; i--) { 
         if(Math.hypot(player.x - collectibles[i].x, player.y - collectibles[i].y) < 40) { 
+            playSound('pickup');
             energy = Math.min(energy + 8, 100); 
-            if(energy >= 100 && !isOverloaded){ isOverloaded=true; energy=0; overloadTimer=300; } 
+            if(energy >= 100 && !isOverloaded){ isOverloaded=true; energy=0; overloadTimer=300; playSound('overload_start'); } 
             collectibles.splice(i, 1); updateUI(); 
         } 
     }
