@@ -165,7 +165,7 @@ let dashTimer = 0;
 
 // --- 無人機 (Drone) 狀態 ---
 let drone = {
-    active: false, // 初始改為 false，選到卡片後才開啟
+    active: false, 
     angle: 0,
     radius: 65,
     shootTimer: 0,
@@ -193,17 +193,26 @@ let upgradePool = [
     { 
         id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet", rarity: 1.0,
         effect: () => player.multiShot++, 
-        isAvailable: () => player.multiShot < 5 // 上限 5
+        isAvailable: () => player.multiShot < 5 
     },
     { 
         id: "speed_plus", title: "Speed+", desc: "15% Speed", rarity: 1.0,
         effect: () => heroes[player.type].speed *= 1.15, 
-        isAvailable: () => heroes[player.type].speed < 15 // 上限 15
+        isAvailable: () => heroes[player.type].speed < 15 
     },
     { 
-        id: "charge_plus", title: "Charge+", desc: "25% Charge", rarity: 1.0,
+        id: "charge_plus", title: "Charge+", desc: "25% Charge Speed", rarity: 1.0,
         effect: () => heroes[player.type].chargeSpeed *= 1.25, 
-        isAvailable: () => heroes[player.type].chargeSpeed < 3.0 // 上限 3倍
+        isAvailable: () => {
+            // Scout 上限為 2 倍 (初始 1.8 * 2 = 3.6)
+            // Knight & Fortress 上限為 3 倍
+            if (player.type === 'scout') {
+                return heroes[player.type].chargeSpeed < 3.6;
+            } else {
+                const base = (player.type === 'fortress' ? 0.6 : 1.0);
+                return heroes[player.type].chargeSpeed < (base * 3.0);
+            }
+        }
     },
     { 
         id: "repair", title: "Repair", desc: "Heal 50% HP", rarity: 1.0,
@@ -211,12 +220,11 @@ let upgradePool = [
         isAvailable: () => true 
     },
     { 
-        id: "drone_unit", title: "DRONE UNIT", desc: "Autonomous Chain Striker", rarity: 0.1, // 低機率 (0.1)
+        id: "drone_unit", title: "DRONE UNIT", desc: "Autonomous Chain Striker", rarity: 0.1, 
         effect: () => { 
             drone.active = true; 
-            // 選過後從池中永久移除，所以此項不需在 isAvailable 檢查，點選時手動過濾即可
         }, 
-        isAvailable: () => !drone.active // 只能選一次
+        isAvailable: () => !drone.active 
     }
 ];
 
@@ -238,7 +246,7 @@ function resetGame() {
     defeatedBossCount = 0; intensityMultiplier = 1.0;
     bullets=[]; enemies=[]; collectibles=[]; boss=null; bossBullets=[];
     particles=[]; dashCooldown=0; isDashing=false;
-    drone.active = false; // 重置無人機
+    drone.active = false; 
     isPaused = false; isGameOver = false;
     updateUI(); 
 }
@@ -266,10 +274,10 @@ function updateUI() {
 }
 
 function triggerDamageFeedback(amt) {
-    if(isDashing) return; // 衝刺時無敵
+    if(isDashing) return; 
     player.hp -= amt;
     damageFlash = 10;
-    shakeAmount = 10; // Trigger Screen Shake
+    shakeAmount = 10; 
     const hpContainer = document.getElementById('hp-container');
     hpContainer.classList.add('shaking');
     setTimeout(() => hpContainer.classList.remove('shaking'), 200);
@@ -288,11 +296,9 @@ function showUpgradeScreen() {
     const container = document.getElementById('card-options');
     container.innerHTML = ""; screen.style.display = "flex";
 
-    // --- 加權隨機選卡邏輯 ---
     let availableOptions = upgradePool.filter(opt => opt.isAvailable());
     let selectedCards = [];
 
-    // 抽三張卡
     for(let i=0; i<3; i++) {
         if(availableOptions.length === 0) break;
         
@@ -304,7 +310,7 @@ function showUpgradeScreen() {
             currentSum += availableOptions[j].rarity;
             if(random <= currentSum) {
                 selectedCards.push(availableOptions[j]);
-                availableOptions.splice(j, 1); // 避免同一輪選到重複卡片
+                availableOptions.splice(j, 1); 
                 break;
             }
         }
@@ -312,7 +318,6 @@ function showUpgradeScreen() {
 
     selectedCards.forEach(option => {
         const div = document.createElement('div'); div.className = 'upgrade-card';
-        // 如果是無人機，給予特別顏色
         if(option.id === "drone_unit") div.style.borderColor = "#00ffcc";
         
         div.innerHTML = `<h3>${option.title}</h3><p>${option.desc}</p>`;
@@ -326,7 +331,6 @@ function showUpgradeScreen() {
     });
 }
 
-// --- 粒子系統邏輯 ---
 function createExplosion(x, y, color) {
     for(let i=0; i<8; i++) {
         particles.push({
@@ -358,7 +362,7 @@ function initBGParticles() {
 function spawnBoss() { 
     const bData = bossDatabase[Math.floor(Math.random() * bossDatabase.length)];
     const difficultyMult = (1 + (score / 20000)) * intensityMultiplier;
-    shakeAmount = 20; // Big shake when boss appears
+    shakeAmount = 20; 
 
     boss = { 
         x: canvas.width/2, y: -100, 
@@ -392,11 +396,13 @@ function drawGrid() {
 window.addEventListener('keydown', e => { 
     keys[e.key.toLowerCase()] = true; 
     if(e.key === 'Escape' || e.key.toLowerCase() === 'p') togglePause(); 
-    // 新增：衝刺按鍵
+    
+    // --- 衝刺觸發邏輯 ---
     if(e.key === 'Shift' && dashCooldown <= 0 && gameStarted && !isPaused) {
         isDashing = true;
         dashTimer = 10;
-        dashCooldown = 80;
+        dashCooldown = 140; // 增加約 1 秒冷卻 (原本 80 + 60 = 140)
+        updateUI(); // 確保 UI 立即更新為 Recharging
     }
 });
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
@@ -421,7 +427,6 @@ function releaseNeonRing() {
     for(let a=0; a<Math.PI*2; a+=0.4) { bullets.push({x:player.x, y:player.y, vx:Math.cos(a)*8, vy:Math.sin(a)*8, type:'ring', damage: dmg}); }
 }
 
-// --- 無人機自動射擊邏輯 (連鎖彈射) ---
 function droneAutoShoot() {
     if (!drone.active || (enemies.length === 0 && !boss)) return;
 
@@ -560,20 +565,22 @@ function update() {
     gameTick++;
     if(damageFlash > 0) damageFlash--; 
     
-    // --- 衝刺邏輯 ---
+    // --- 衝刺邏輯更新 ---
     let currentSpeed = hero.speed;
     if(isDashing) {
         currentSpeed *= 3;
         dashTimer--;
-        if(dashTimer <= 0) isDashing = false;
+        if(dashTimer <= 0) {
+            isDashing = false;
+        }
         particles.push({x: player.x, y: player.y, vx:0, vy:0, life:10, color: hero.color, isTrail: true});
     }
+    
     if(dashCooldown > 0) {
         dashCooldown--;
         if(dashCooldown === 0) updateUI();
     }
     
-    // --- 無人機運作 (僅在啟用時) ---
     if (drone.active) {
         drone.angle += 0.05;
         drone.shootTimer++;
@@ -583,19 +590,16 @@ function update() {
         }
     }
     
-    // Player Movement
     if(keys['w']) player.y -= currentSpeed; if(keys['s']) player.y += currentSpeed; if(keys['a']) player.x -= currentSpeed; if(keys['d']) player.x += currentSpeed;
     player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
     player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
     
-    // Skill Handling
     if(isCharging) chargeTime += hero.chargeSpeed;
     if(isOverloaded) { if(gameTick % 5 === 0) fireBullet(); overloadTimer--; if(overloadTimer <= 0) isOverloaded = false; updateUI(); } 
     
     handleEnemySpawning();
     updateBossAI();
 
-    // 粒子更新
     for(let i=particles.length-1; i>=0; i--) {
         particles[i].x += particles[i].vx; particles[i].y += particles[i].vy;
         particles[i].life--;
@@ -607,7 +611,6 @@ function update() {
         if(p.y > canvas.height) p.y = 0;
     });
 
-    // Projectile Updates
     for(let i=bossBullets.length-1; i>=0; i--) {
         let b = bossBullets[i];
         b.x += b.vx; b.y += b.vy;
@@ -620,7 +623,6 @@ function update() {
         if(b.x<-150 || b.x>canvas.width+150 || b.y<-150 || b.y>canvas.height+150) bossBullets.splice(i, 1);
     }
 
-    // Enemy and Collision Loop
     for(let i=enemies.length-1; i>=0; i--) {
         let e = enemies[i], ed = Math.hypot(player.x-e.x, player.y-e.y); 
         if(ed > 1) { e.x += (player.x-e.x)/ed * e.speed; e.y += (player.y-e.y)/ed * e.speed; }
@@ -661,7 +663,6 @@ function update() {
         }
     }
 
-    // Energy Drops
     for(let i=collectibles.length-1; i>=0; i--) { 
         if(Math.hypot(player.x - collectibles[i].x, player.y - collectibles[i].y) < 40) { 
             energy = Math.min(energy + 8, 100); 
@@ -670,14 +671,12 @@ function update() {
         } 
     }
     
-    // Player Bullets
     for(let i=bullets.length-1; i>=0; i--) { 
         bullets[i].x += bullets[i].vx; 
         bullets[i].y += bullets[i].vy; 
         if(bullets[i].x<-100||bullets[i].x>canvas.width+100||bullets[i].y<-100||bullets[i].y>canvas.height+100) bullets.splice(i, 1); 
     }
     
-    // Death Check
     if(player.hp <= 0) { 
         isGameOver = true; 
         if(score > highScore) { highScore = score; localStorage.setItem('neon_high_score', highScore); }
@@ -714,7 +713,6 @@ function draw() {
         });
         ctx.globalAlpha = 1.0;
 
-        // --- 繪製無人機夥伴 (僅在啟用時) ---
         if (drone.active) {
             let dx = player.x + Math.cos(drone.angle) * drone.radius;
             let dy = player.y + Math.sin(drone.angle) * drone.radius;
