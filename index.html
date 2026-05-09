@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
     <link rel="icon" type="image/png" href="Neon-Survivor.png">
-    <meta property="og:title" content="Neon Survivor">
+    <meta property="og:title" content="Neon Survivor 2.0">
     <meta property="og:description" content="挑戰你的反應極限，在霓虹世界中生存下去！">
-    <meta property="og:image" content="https://s11331136.github.io/Neon-Survivor/Neon-Survivor.png">
+    <meta property="og:image" content="https://s11331136.github.io/Neon-Survivor_2.0/Neon-Survivor.png">
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon Survivor - Ultimate Edition</title>
@@ -98,7 +99,7 @@
         <h1>NEON SURVIVOR</h1>
         <p class="controls-hint">
             WASD: Move | Shift: Dash | Left Click: Shoot <br>
-            Right Click (Hold): Charge Neon Blade | E Key: Neon Ring Burst
+            Right Click (Hold): Neon Blade | E Key: Neon Ring
         </p>
         <button class="btn-start" onclick="toCharSelect()">ENTER SYSTEM</button>
     </div>
@@ -119,13 +120,13 @@
                 <p>Tanky & Double ATK<br>Slow Movement.</p>
             </div>
         </div>
-        <button class="btn-start" id="confirm-btn" disabled onclick="startGame()" style="font-size: 20px;">CONFIRM & DEPLOY</button>
+        <button class="btn-start" id="confirm-btn" onclick="startGame()" style="font-size: 20px;">CONFIRM & START</button>
     </div>
 
     <div id="pause-menu" class="overlay">
         <h2 style="color: #00ffcc; font-size: 60px; letter-spacing: 5px; text-shadow: 0 0 20px #00ffcc;">SYSTEM PAUSED</h2>
         <button class="btn-go-try" onclick="togglePause()">RESUME (ESC/P)</button>
-        <button class="btn-go-exit" onclick="location.reload()">REBOOT SYSTEM</button>
+        <button class="btn-go-exit" onclick="location.reload()">RETURN SYSTEM</button>
     </div>
 
     <div id="upgrade-screen" class="overlay">
@@ -136,6 +137,8 @@
     <div id="game-over-screen" class="overlay">
         <h2>MISSION FAILED</h2>
         <p>Final Score: <span id="final-score-val" style="color: #00ffcc; font-weight: bold;">0</span></p>
+        <button class="btn-start" id="revive-btn" onclick="watchAdToRevive()" style="border-color: #ffcc00; color: #ffcc00; margin-bottom: 20px;">WATCH AD TO REVIVE (RESTORE 50% HP)</button>
+        <br>
         <button class="btn-go-try" onclick="location.reload()">TRY AGAIN</button>
         <button class="btn-go-exit" onclick="backToMain()">EXIT TO MENU</button>
     </div>
@@ -181,6 +184,34 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
+    
+/** * ============================================================================
+* CrazyGames SDK 初始化 (加上安全保護)
+* ============================================================================
+ */
+let cgsdk = null;
+try {
+    if (window.CrazyGames && window.CrazyGames.SDK) {
+        cgsdk = window.CrazyGames.SDK;
+        // 遊戲加載完成後通知 SDK (增加 cgsdk.game 的安全判斷)
+        if (cgsdk.game) {
+            cgsdk.game.sdkGameReady();
+        }
+    }
+} catch (error) {
+    console.error("SDK 初始化略過，不影響遊戲運行", error);
+}
+
+// 廣告播放時的靜音控制
+const adFinished = () => {
+    isPaused = false;
+    // 可以在這裡恢復遊戲音效 (如果有音效系統)
+};
+const adStarted = () => {
+    isPaused = true;
+    // 可以在這裡暫停遊戲音效
+};
+    
 /**
  * ============================================================================
  * CORE CONSTANTS AND STATE
@@ -204,10 +235,10 @@ const keys = {};
 
 // 技能與冷卻狀態
 let dashCooldown = 0, isDashing = false, dashTimer = 0;
-const MAX_DASH_CD = 80;
+const MAX_DASH_CD = 90;
 
 let ringCooldown = 0;
-const MAX_RING_CD = 240; // 霓虹環冷卻設定為 240 幀 (約 4 秒)
+const MAX_RING_CD = 180; // 霓虹環冷卻設定為 240 幀 (約 4 秒)
 
 // 光刀系統專屬狀態
 let blades = [];
@@ -250,12 +281,12 @@ const bossDatabase = [
 // 升級池 (結合所有需求，包含 ATK+)
 let upgradePool = [
     { 
-        id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet Path", rarity: 1.0,
+        id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet", rarity: 1.0,
         effect: () => player.multiShot++, 
         isAvailable: () => player.multiShot < 5 
     },
     { 
-        id: "atk_amp", title: "ATK AMP", desc: "+10% Base Damage", rarity: 1.2,
+        id: "atk_amp", title: "ATK+", desc: "+10% Base Damage", rarity: 1.2,
         effect: () => player.atkBonus += 0.1, 
         isAvailable: () => true // 無上限疊加
     },
@@ -287,27 +318,103 @@ let upgradePool = [
  * ============================================================================
  */
 function toCharSelect() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('char-select').style.display = 'flex'; }
-function selectChar(type) { player.type = type; document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active')); document.getElementById('card-' + type).classList.add('active'); document.getElementById('confirm-btn').disabled = false; }
-function startGame() { document.getElementById('char-select').style.display = 'none'; document.getElementById('game-ui').style.display = 'block'; gameStarted = true; initBGParticles(); resize(); resetGame(); }
+
+// 🌟 這裡換成加入了 try...catch 保護的防呆版選角程式碼 🌟
+function selectChar(type) { 
+    try {
+        console.log("選擇了角色:", type);
+        player.type = type; 
+        document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active')); 
+        const card = document.getElementById('card-' + type);
+        if(card) card.classList.add('active'); 
+        const btn = document.getElementById('confirm-btn');
+        if(btn) btn.disabled = false; 
+    } catch (error) {
+        console.error("選角時發生錯誤，強制忽略:", error);
+        document.getElementById('confirm-btn').disabled = false;
+    }
+}
+
+// 🌟 替換為防呆加強版的 startGame 🌟
+function startGame() { 
+    try {
+        console.log("== 🟢 玩家點擊了開始按鈕 ==");
+        
+        // 1. 嘗試通知 SDK (加上雙重防護)
+        try {
+            if (window.CrazyGames && window.CrazyGames.SDK && cgsdk) {
+                cgsdk.game.gameplayStart(); 
+                console.log("✔️ 已成功通知 SDK 遊戲開始");
+            }
+        } catch (sdkError) {
+            console.warn("⚠️ SDK 通知失敗，但不影響遊戲，強制繼續：", sdkError);
+        }
+
+        // 2. 切換介面 (這兩行絕對不能被擋住)
+        document.getElementById('char-select').style.display = 'none'; 
+        document.getElementById('game-ui').style.display = 'block'; 
+        
+        // 3. 啟動遊戲引擎變數
+        gameStarted = true; 
+        initBGParticles(); 
+        resize(); 
+        resetGame(); 
+        
+    } catch (error) {
+        console.error("❌ startGame 發生嚴重錯誤，請截圖這段紅字：", error);
+    }
+}
+
 function backToMain() { location.reload(); }
 
+// 🌟 替換為防呆加強版的 resetGame 🌟
 function resetGame() { 
-    const d = heroes[player.type]; 
-    player.x = canvas.width / 2; player.y = canvas.height / 2; 
-    player.hp = d.maxHp; player.maxHp = d.maxHp; 
-    player.multiShot = 1; player.atkBonus = 1.0; // 重置攻擊加成
-    score = 0; energy = 0; lastUpgradeThresh = 0; lastBossThresh = 0; gameTick = 0;
-    defeatedBossCount = 0; intensityMultiplier = 1.0;
-    
-    // 清空所有陣列實體
-    bullets = []; enemies = []; collectibles = []; boss = null; bossBullets = [];
-    particles = []; blades = []; 
-    dashCooldown = 0; isDashing = false; ringCooldown = 0;
-    drone.active = false; 
-    isPaused = false; isGameOver = false;
-    
-    document.getElementById('high-score').innerText = highScore;
-    updateUI(); 
+    try {
+        console.log("== 🔄 正在初始化遊戲回合 ==");
+        
+        // [CrazyGames] 嘗試播放廣告 (Midroll)
+        try {
+            if (cgsdk && cgsdk.ad) {
+                console.log("📺 正在向 SDK 請求廣告...");
+                cgsdk.ad.requestAd('midroll', {
+                    adStarted: () => { console.log("📺 廣告開始播放"); isPaused = true; },
+                    adFinished: () => { console.log("📺 廣告播放完畢"); isPaused = false; },
+                    adError: (e) => { console.warn("📺 廣告載入異常，略過廣告", e); isPaused = false; }
+                });
+            }
+        } catch (adError) {
+            console.warn("⚠️ 廣告系統錯誤，略過", adError);
+        }
+
+        // 初始化玩家數值
+        const d = heroes[player.type] || heroes['knight']; // 防呆：如果沒選到角色就預設騎士
+        player.x = canvas.width / 2; player.y = canvas.height / 2; 
+        player.hp = d.maxHp; player.maxHp = d.maxHp; 
+        player.multiShot = 1; player.atkBonus = 1.0; 
+        
+        // 初始化遊戲數值
+        score = 0; energy = 0; lastUpgradeThresh = 0; lastBossThresh = 0; gameTick = 0;
+        defeatedBossCount = 0; intensityMultiplier = 1.0;
+        
+        // 清空畫面上所有的東西
+        bullets = []; enemies = []; collectibles = []; boss = null; bossBullets = [];
+        particles = []; blades = []; 
+        dashCooldown = 0; isDashing = false; ringCooldown = 0;
+        drone.active = false; 
+        isPaused = false; isGameOver = false;
+        
+        document.getElementById('high-score').innerText = highScore;
+        
+        // 確保復活按鈕能再次點擊
+        const reviveBtn = document.getElementById('revive-btn');
+        if(reviveBtn) reviveBtn.style.display = 'inline-block';
+        
+        updateUI(); 
+        console.log("✔️ 遊戲初始化完成，正式開始！");
+        
+    } catch (error) {
+        console.error("❌ resetGame 發生嚴重錯誤：", error);
+    }
 }
 
 // 統整且詳細的 UI 更新系統
@@ -424,6 +531,65 @@ function showUpgradeScreen() {
     });
 }
 
+function watchAdToRevive() {
+    try {
+        console.log("== 🟢 玩家嘗試點擊復活 ==");
+
+        // 獨立出復活的具體邏輯，確保成功或失敗都能順利執行
+        const executeRevive = () => {
+            console.log("✔️ 啟動復活程序！");
+            
+            // 1. 恢復狀態
+            player.hp = player.maxHp * 0.5; // 恢復 50% 血量
+            isGameOver = false; // 解除死亡狀態
+            isPaused = false; 
+            
+            // 2. 隱藏介面 (每局限復活一次)
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.getElementById('revive-btn').style.display = 'none'; 
+            
+            // 3. 🛡️【關鍵防護：復活清場】避免一復活就瞬間被秒殺
+            enemies = []; // 清空小怪
+            bossBullets = []; // 清空 Boss 子彈
+            
+            // 4. 復活視覺震撼特效
+            createExplosion(player.x, player.y, "#00ffcc", 40, 30); // 原地大爆發
+            shakeAmount = 20; // 畫面震動
+
+            updateUI();
+        };
+
+        // 檢查 CrazyGames SDK 狀態
+        if (cgsdk && cgsdk.ad) {
+            console.log("📺 正在向 SDK 請求獎勵廣告...");
+            cgsdk.ad.requestAd('rewarded', {
+                adStarted: () => { 
+                    console.log("📺 廣告開始播放");
+                    isPaused = true; 
+                },
+                adFinished: () => {
+                    console.log("📺 廣告播放完畢，給予獎勵");
+                    executeRevive();
+                },
+                adError: (error) => {
+                    console.warn("⚠️ 廣告載入失敗或被阻擋，直接給予補償復活：", error);
+                    executeRevive(); // 就算廣告壞了，也照樣讓玩家復活，提升體驗
+                }
+            });
+        } else {
+            console.log("⚠️ 測試環境無 SDK，直接執行復活");
+            executeRevive();
+        }
+
+    } catch (error) {
+        console.error("❌ 復活按鈕發生嚴重錯誤：", error);
+        // 如果發生不可預期的嚴重錯誤，強制把 UI 關掉讓他繼續玩
+        document.getElementById('game-over-screen').style.display = 'none';
+        isGameOver = false;
+        player.hp = player.maxHp * 0.5;
+    }
+}
+    
 /**
  * ============================================================================
  * EFFECTS AND PARTICLES
