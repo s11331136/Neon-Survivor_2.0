@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
     <link rel="icon" type="image/png" href="Neon-Survivor.png">
-    <meta property="og:title" content="Neon Survivor 2.0">
+    <meta property="og:title" content="Neon Survivor">
     <meta property="og:description" content="挑戰你的反應極限，在霓虹世界中生存下去！">
-    <meta property="og:image" content="https://s11331136.github.io/Neon-Survivor_2.0/Neon-Survivor.png">
-    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <meta property="og:image" content="https://s11331136.github.io/Neon-Survivor/Neon-Survivor.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon Survivor - Ultimate Edition</title>
@@ -99,7 +98,7 @@
         <h1>NEON SURVIVOR</h1>
         <p class="controls-hint">
             WASD: Move | Shift: Dash | Left Click: Shoot <br>
-            Right Click (Hold): Neon Blade | E Key: Neon Ring
+            Right Click (Hold): Charge Neon Blade | E Key: Neon Ring Burst
         </p>
         <button class="btn-start" onclick="toCharSelect()">ENTER SYSTEM</button>
     </div>
@@ -120,13 +119,13 @@
                 <p>Tanky & Double ATK<br>Slow Movement.</p>
             </div>
         </div>
-        <button class="btn-start" id="confirm-btn" disabled onclick="startGame()" style="font-size: 20px;">CONFIRM & START</button>
+        <button class="btn-start" id="confirm-btn" disabled onclick="startGame()" style="font-size: 20px;">CONFIRM & DEPLOY</button>
     </div>
 
     <div id="pause-menu" class="overlay">
         <h2 style="color: #00ffcc; font-size: 60px; letter-spacing: 5px; text-shadow: 0 0 20px #00ffcc;">SYSTEM PAUSED</h2>
         <button class="btn-go-try" onclick="togglePause()">RESUME (ESC/P)</button>
-        <button class="btn-go-exit" onclick="location.reload()">RETURN SYSTEM</button>
+        <button class="btn-go-exit" onclick="location.reload()">REBOOT SYSTEM</button>
     </div>
 
     <div id="upgrade-screen" class="overlay">
@@ -137,8 +136,6 @@
     <div id="game-over-screen" class="overlay">
         <h2>MISSION FAILED</h2>
         <p>Final Score: <span id="final-score-val" style="color: #00ffcc; font-weight: bold;">0</span></p>
-        <button class="btn-start" id="revive-btn" onclick="watchAdToRevive()" style="border-color: #ffcc00; color: #ffcc00; margin-bottom: 20px;">WATCH AD TO REVIVE (RESTORE 50% HP)</button>
-        <br>
         <button class="btn-go-try" onclick="location.reload()">TRY AGAIN</button>
         <button class="btn-go-exit" onclick="backToMain()">EXIT TO MENU</button>
     </div>
@@ -184,29 +181,6 @@
     <canvas id="gameCanvas"></canvas>
 
 <script>
-    
-/** 
-* ============================================================================
-* CrazyGames SDK 初始化
-* ============================================================================
- */
-let cgsdk = null;
-if (window.CrazyGames && window.CrazyGames.SDK) {
-    cgsdk = window.CrazyGames.SDK;
-    // 遊戲加載完成後通知 SDK
-    cgsdk.game.sdkGameReady();
-}
-
-// 廣告播放時的靜音控制
-const adFinished = () => {
-    isPaused = false;
-    // 可以在這裡恢復遊戲音效 (如果有音效系統)
-};
-const adStarted = () => {
-    isPaused = true;
-    // 可以在這裡暫停遊戲音效
-};
-    
 /**
  * ============================================================================
  * CORE CONSTANTS AND STATE
@@ -230,10 +204,10 @@ const keys = {};
 
 // 技能與冷卻狀態
 let dashCooldown = 0, isDashing = false, dashTimer = 0;
-const MAX_DASH_CD = 90;
+const MAX_DASH_CD = 80;
 
 let ringCooldown = 0;
-const MAX_RING_CD = 180; // 霓虹環冷卻設定為 240 幀 (約 4 秒)
+const MAX_RING_CD = 240; // 霓虹環冷卻設定為 240 幀 (約 4 秒)
 
 // 光刀系統專屬狀態
 let blades = [];
@@ -276,12 +250,12 @@ const bossDatabase = [
 // 升級池 (結合所有需求，包含 ATK+)
 let upgradePool = [
     { 
-        id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet", rarity: 1.0,
+        id: "multi_shot", title: "Multi-Shot", desc: "+1 Bullet Path", rarity: 1.0,
         effect: () => player.multiShot++, 
         isAvailable: () => player.multiShot < 5 
     },
     { 
-        id: "atk_amp", title: "ATK+", desc: "+10% Base Damage", rarity: 1.2,
+        id: "atk_amp", title: "ATK AMP", desc: "+10% Base Damage", rarity: 1.2,
         effect: () => player.atkBonus += 0.1, 
         isAvailable: () => true // 無上限疊加
     },
@@ -314,23 +288,10 @@ let upgradePool = [
  */
 function toCharSelect() { document.getElementById('main-menu').style.display = 'none'; document.getElementById('char-select').style.display = 'flex'; }
 function selectChar(type) { player.type = type; document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active')); document.getElementById('card-' + type).classList.add('active'); document.getElementById('confirm-btn').disabled = false; }
-function startGame() { 
-    if (cgsdk) cgsdk.game.gameplayStart(); // [CrazyGames] 通知開始遊玩
-    document.getElementById('char-select').style.display = 'none'; 
-    document.getElementById('game-ui').style.display = 'block'; 
-    gameStarted = true; initBGParticles(); resize(); resetGame(); 
-}
+function startGame() { document.getElementById('char-select').style.display = 'none'; document.getElementById('game-ui').style.display = 'block'; gameStarted = true; initBGParticles(); resize(); resetGame(); }
 function backToMain() { location.reload(); }
-    
+
 function resetGame() { 
-    // [CrazyGames] 每次重開遊戲或新回合開始前嘗試播放廣告
-    if (cgsdk) {
-        cgsdk.ad.requestAd('midroll', {
-            adStarted: () => { isPaused = true; },
-            adFinished: () => { isPaused = false; },
-            adError: () => { isPaused = false; }
-        });
-    }
     const d = heroes[player.type]; 
     player.x = canvas.width / 2; player.y = canvas.height / 2; 
     player.hp = d.maxHp; player.maxHp = d.maxHp; 
@@ -463,33 +424,6 @@ function showUpgradeScreen() {
     });
 }
 
-function watchAdToRevive() {
-    if (cgsdk) {
-        cgsdk.ad.requestAd('rewarded', {
-            adStarted: () => { isPaused = true; },
-            adFinished: () => {
-                // 廣告看完，執行復活邏輯
-                player.hp = player.maxHp * 0.5;
-                isGameOver = false;
-                isPaused = false;
-                document.getElementById('game-over-screen').style.display = 'none';
-                document.getElementById('revive-btn').style.display = 'none'; // 每局只能復活一次
-                updateUI();
-            },
-            adError: () => {
-                alert("Ad failed to load. Please try again.");
-                isPaused = false;
-            }
-        });
-    } else {
-        // 如果沒有 SDK (測試環境)，直接復活
-        player.hp = player.maxHp * 0.5;
-        isGameOver = false;
-        document.getElementById('game-over-screen').style.display = 'none';
-        updateUI();
-    }
-}
-    
 /**
  * ============================================================================
  * EFFECTS AND PARTICLES
